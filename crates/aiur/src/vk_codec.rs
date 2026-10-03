@@ -165,6 +165,8 @@ impl W {
     // LookupAir: inner_air, lookups (preprocessed is not serialized).
     self.aircircuit(&c.air.inner_air);
     self.vec(&c.air.lookups, Self::lookup);
+    // Accumulator-mask columns appended by `System::new` under zero-knowledge.
+    self.usize(c.air.extra_width);
     self.usize(c.constraint_count);
     self.usize(c.max_constraint_degree);
     self.usize(c.preprocessed_height);
@@ -213,6 +215,7 @@ pub(crate) fn to_bytes(
   w.vec(&system.preprocessed_indices, |w, idx| {
     w.option(idx, |w, &i| w.usize(i))
   });
+  w.vec(&system.mask_lookup_counts, |w, &k| w.usize(k));
   w.buf
 }
 
@@ -335,6 +338,7 @@ impl<'a> R<'a> {
       inner_air: self.aircircuit()?,
       lookups: self.vec(Self::lookup)?,
       preprocessed: None,
+      extra_width: self.usize()?,
     };
     Ok(Circuit {
       air,
@@ -390,6 +394,7 @@ pub(crate) fn from_bytes(
   let circuits = r.vec(R::circuit)?;
   let preprocessed_commit = r.option(R::commitment)?;
   let preprocessed_indices = r.vec(|r| r.option(R::usize))?;
+  let mask_lookup_counts = r.vec(R::usize)?;
   if r.pos != bytes.len() {
     return Err(format!(
       "trailing data: consumed {} of {}",
@@ -402,6 +407,7 @@ pub(crate) fn from_bytes(
     circuits,
     preprocessed_commit,
     preprocessed_indices,
+    mask_lookup_counts,
   };
   Ok((system, commitment_parameters, fri_parameters))
 }
