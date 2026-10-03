@@ -31,6 +31,10 @@ whose bytes were produced in-process or already validated. -/
 @[extern "rs_aiur_proof_of_bytes_checked"]
 opaque ofBytesChecked : @& ByteArray → Except String Proof
 
+/-- The per-circuit log2 trace heights this proof publishes. -/
+@[extern "rs_aiur_proof_log_degrees"]
+opaque logDegrees : @& Proof → Array Nat
+
 end Proof
 
 structure CommitmentParameters where
@@ -78,6 +82,40 @@ def prove (system : @& AiurSystem)
   let ioData := ioData.foldl (fun acc (k, v) => acc.insert k v) ∅
   let ioMap := ioMap.foldl (fun acc (k, v) => acc.insert k v) ∅
   (claim, proof, ⟨ioData, ioMap⟩)
+
+@[extern "rs_aiur_system_prove_padded"]
+private opaque provePadded' : @& AiurSystem →
+  @& Bytecode.FunIdx → @& Array G →
+  (ioData : @& Array (G × Array G)) →
+  (ioMap : @& Array ((G × Array G) × IOKeyInfo)) →
+  (floors : @& Array Nat) →
+    Array G × Proof × Array (G × Array G) × Array ((G × Array G) × IOKeyInfo)
+
+/-- `prove`, padding circuit `i` to at least `floors[i]` rows (circuit order
+of the system, as returned by `traceHeights`). Proving every witness at one
+fixed set of floors makes the per-circuit heights in the proof, and so
+`Proof.logDegrees`, independent of the witness. -/
+def provePadded (system : @& AiurSystem)
+  (funIdx : @& Bytecode.FunIdx) (args : @& Array G) (ioBuffer : IOBuffer)
+  (floors : @& Array Nat) : Array G × Proof × IOBuffer :=
+  let (claim, proof, ioData, ioMap) := provePadded' system funIdx args
+    ioBuffer.data.toArray ioBuffer.map.toArray floors
+  let ioData := ioData.foldl (fun acc (k, v) => acc.insert k v) ∅
+  let ioMap := ioMap.foldl (fun acc (k, v) => acc.insert k v) ∅
+  (claim, proof, ⟨ioData, ioMap⟩)
+
+@[extern "rs_aiur_system_trace_heights"]
+private opaque traceHeights' : @& AiurSystem →
+  @& Bytecode.FunIdx → @& Array G →
+  (ioData : @& Array (G × Array G)) →
+  (ioMap : @& Array ((G × Array G) × IOKeyInfo)) → Array Nat
+
+/-- Per-circuit trace heights an execution of `funIdx` produces, without
+proving. -/
+def traceHeights (system : @& AiurSystem)
+  (funIdx : @& Bytecode.FunIdx) (args : @& Array G) (ioBuffer : IOBuffer) :
+    Array Nat :=
+  traceHeights' system funIdx args ioBuffer.data.toArray ioBuffer.map.toArray
 
 @[extern "rs_aiur_system_prove_ixvm"]
 private opaque proveIxVM' : @& AiurSystem →

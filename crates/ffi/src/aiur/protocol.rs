@@ -73,9 +73,9 @@ extern "C" fn rs_aiur_proof_of_bytes_checked(
         LeanExternal::alloc(&AIUR_PROOF_CLASS, proof).into();
       LeanExcept::ok(lean_proof)
     },
-    Err(err) => {
-      LeanExcept::error_string(&format!("proof deserialization failed: {err:?}"))
-    },
+    Err(err) => LeanExcept::error_string(&format!(
+      "proof deserialization failed: {err:?}"
+    )),
   }
 }
 
@@ -289,6 +289,67 @@ extern "C" fn rs_aiur_system_prove(
   // Array G × Proof × Array G × Array (Array G × IOKeyInfo)
   let result = LeanProd::new(build_g_array(&claim), proof_io_tuple);
   result.into()
+}
+
+/// `Aiur.AiurSystem.provePadded`: `prove` with per-circuit height floors
+/// (`Array Nat`, circuit order of the system).
+#[unsafe(no_mangle)]
+extern "C" fn rs_aiur_system_prove_padded(
+  aiur_system_obj: LeanExternal<AiurSystem, LeanBorrowed<'_>>,
+  fun_idx: LeanNat<LeanBorrowed<'_>>,
+  args: LeanArray<LeanBorrowed<'_>>,
+  io_data_arr: LeanArray<LeanBorrowed<'_>>,
+  io_map_arr: LeanArray<LeanBorrowed<'_>>,
+  floors: LeanArray<LeanBorrowed<'_>>,
+) -> LeanOwned {
+  let fun_idx = lean_unbox_nat_as_usize(fun_idx.inner());
+  let args = args.map(|x| lean_unbox_g(&x));
+  let floors = floors.map(|x| lean_unbox_nat_as_usize(&x));
+  let mut io_buffer = decode_io_buffer(&io_data_arr, &io_map_arr);
+  let (claim, proof) =
+    aiur_system_obj.get().prove_padded(fun_idx, &args, &mut io_buffer, &floors);
+  let lean_proof: LeanOwned =
+    LeanExternal::alloc(&AIUR_PROOF_CLASS, proof).into();
+  let lean_io = build_lean_io_buffer(&io_buffer);
+  let proof_io_tuple = LeanProd::new(lean_proof, lean_io);
+  let result = LeanProd::new(build_g_array(&claim), proof_io_tuple);
+  result.into()
+}
+
+/// `Aiur.AiurSystem.traceHeights`: per-circuit trace heights of an execution,
+/// without proving.
+#[unsafe(no_mangle)]
+extern "C" fn rs_aiur_system_trace_heights(
+  aiur_system_obj: LeanExternal<AiurSystem, LeanBorrowed<'_>>,
+  fun_idx: LeanNat<LeanBorrowed<'_>>,
+  args: LeanArray<LeanBorrowed<'_>>,
+  io_data_arr: LeanArray<LeanBorrowed<'_>>,
+  io_map_arr: LeanArray<LeanBorrowed<'_>>,
+) -> LeanOwned {
+  let fun_idx = lean_unbox_nat_as_usize(fun_idx.inner());
+  let args = args.map(|x| lean_unbox_g(&x));
+  let mut io_buffer = decode_io_buffer(&io_data_arr, &io_map_arr);
+  let heights =
+    aiur_system_obj.get().trace_heights(fun_idx, &args, &mut io_buffer);
+  let arr = LeanArray::alloc(heights.len());
+  for (i, h) in heights.iter().enumerate() {
+    arr.set(i, LeanOwned::box_usize(*h));
+  }
+  arr.into()
+}
+
+/// `Aiur.Proof.logDegrees`: the per-circuit log2 trace heights a proof
+/// publishes.
+#[unsafe(no_mangle)]
+extern "C" fn rs_aiur_proof_log_degrees(
+  proof_obj: LeanExternal<AiurProof, LeanBorrowed<'_>>,
+) -> LeanOwned {
+  let log_degrees = &proof_obj.get().log_degrees;
+  let arr = LeanArray::alloc(log_degrees.len());
+  for (i, d) in log_degrees.iter().enumerate() {
+    arr.set(i, LeanOwned::box_usize(usize::from(*d)));
+  }
+  arr.into()
 }
 
 // =============================================================================

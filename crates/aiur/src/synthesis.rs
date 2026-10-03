@@ -1,5 +1,5 @@
-use rand::rngs::StdRng;
 use multi_stark::config::StarkGenericConfig as _;
+use multi_stark::p3_matrix::Matrix as _;
 use multi_stark::{
   lookup::LookupAir,
   p3_air::{Air, AirBuilder, BaseAir},
@@ -7,13 +7,12 @@ use multi_stark::{
   p3_matrix::dense::RowMajorMatrix,
   prover::Proof,
   system::{ProverKey, System, SystemWitness},
-  types::{
-    CommitmentParameters, FriParameters, GoldilocksBlake3ZkConfig,
-  },
+  types::{CommitmentParameters, FriParameters, GoldilocksBlake3ZkConfig},
   verifier::VerificationError,
 };
+use rand::rngs::StdRng;
 use rayon::iter::{
-  IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+  IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
 };
 
 use crate::{
@@ -138,11 +137,87 @@ impl AiurSystem {
   }
 
   #[tracing::instrument(level = "info", skip_all, name = "aiur/prove")]
+  /// Builds the stage-1 traces and lookups for every circuit, padding circuit
+  /// `i` to `max(next_pow2(rows), min_trace_height, floors[i])`. Preprocessed
+  /// gadget tables have fixed heights and ignore floors.
+  fn build_witness(
+    &self,
+    query_record: &QueryRecord,
+    io_buffer: &IOBuffer,
+    floors: &[usize],
+  ) -> SystemWitness<G> {
+    let min_height = self.system.config.min_trace_height();
+    let mut circuit_types: Vec<CircuitType> =
+      (0..self.toplevel.functions.len())
+        .filter(|&idx| self.toplevel.functions[idx].constrained)
+        .map(|idx| CircuitType::Function { idx })
+        .collect();
+    circuit_types.extend(
+      self
+        .toplevel
+        .memory_sizes
+        .iter()
+        .map(|&width| CircuitType::Memory { width }),
+    );
+    circuit_types.extend([CircuitType::Bytes1, CircuitType::Bytes2]);
+    let witness_data = circuit_types
+      .into_par_iter()
+      .enumerate()
+      .map(|(i, circuit_type)| {
+        let floor = min_height
+          .max(floors.get(i).copied().unwrap_or(0).next_power_of_two());
+        match circuit_type {
+          CircuitType::Function { idx } => {
+            self.toplevel.witness_data(idx, query_record, io_buffer, floor)
+          },
+          CircuitType::Memory { width } => {
+            Memory::witness_data(width, query_record, floor)
+          },
+          CircuitType::Bytes1 => Bytes1.witness_data(query_record),
+          CircuitType::Bytes2 => Bytes2.witness_data(query_record),
+        }
+      })
+      .collect::<Vec<_>>();
+    let (traces, lookups) = witness_data.into_iter().unzip();
+    SystemWitness { traces, lookups }
+  }
+
   pub fn prove(
     &self,
     fun_idx: FunIdx,
     input: &[G],
     io_buffer: &mut IOBuffer,
+  ) -> (Vec<G>, AiurProof) {
+    self.prove_padded(fun_idx, input, io_buffer, &[])
+  }
+
+  /// Per-circuit trace heights an execution produces, without proving, in
+  /// the circuit order of the system (constrained functions, memories,
+  /// gadgets). Used to calibrate a fixed trace shape for `prove_padded`.
+  pub fn trace_heights(
+    &self,
+    fun_idx: FunIdx,
+    input: &[G],
+    io_buffer: &mut IOBuffer,
+  ) -> Vec<usize> {
+    let (query_record, _output) = self
+      .toplevel
+      .execute(fun_idx, input.to_vec(), io_buffer)
+      .expect("Aiur execution failed during trace_heights");
+    let witness = self.build_witness(&query_record, io_buffer, &[]);
+    witness.traces.iter().map(|t| t.height()).collect()
+  }
+
+  /// Like `prove`, but pads circuit `i` to at least `floors[i]` rows (padded
+  /// to a power of two; missing entries mean no floor). Proving every
+  /// witness at one fixed set of floors makes the per-circuit heights in the
+  /// proof independent of the witness.
+  pub fn prove_padded(
+    &self,
+    fun_idx: FunIdx,
+    input: &[G],
+    io_buffer: &mut IOBuffer,
+    floors: &[usize],
   ) -> (Vec<G>, AiurProof) {
     tracing_texray::examine_current();
 
@@ -158,38 +233,8 @@ impl AiurSystem {
 
     // Build the `SystemWitness`
     let _g = tracing::info_span!("aiur/witness").entered();
-    let min_height = self.system.config.min_trace_height();
-    let functions =
-      (0..self.toplevel.functions.len()).into_par_iter().filter_map(|idx| {
-        if self.toplevel.functions[idx].constrained {
-          Some(CircuitType::Function { idx })
-        } else {
-          None
-        }
-      });
-    let memories = self
-      .toplevel
-      .memory_sizes
-      .par_iter()
-      .map(|&width| CircuitType::Memory { width });
-    let gadgets = [CircuitType::Bytes1, CircuitType::Bytes2].into_par_iter();
-    let witness_data = functions
-      .chain(memories)
-      .chain(gadgets)
-      .map(|circuit_type| match circuit_type {
-        CircuitType::Function { idx } => {
-          self.toplevel.witness_data(idx, &query_record, io_buffer, min_height)
-        },
-        CircuitType::Memory { width } => {
-          Memory::witness_data(width, &query_record, min_height)
-        },
-        CircuitType::Bytes1 => Bytes1.witness_data(&query_record),
-        CircuitType::Bytes2 => Bytes2.witness_data(&query_record),
-      })
-      .collect::<Vec<_>>();
+    let witness = self.build_witness(&query_record, io_buffer, floors);
     drop(query_record); // Early drop to free memory.
-    let (traces, lookups) = witness_data.into_iter().unzip();
-    let witness = SystemWitness { traces, lookups };
     drop(_g);
 
     // Construct the claim.
@@ -236,38 +281,8 @@ impl AiurSystem {
     drop(_g);
 
     let _g = tracing::info_span!("aiur/witness").entered();
-    let min_height = self.system.config.min_trace_height();
-    let functions =
-      (0..self.toplevel.functions.len()).into_par_iter().filter_map(|idx| {
-        if self.toplevel.functions[idx].constrained {
-          Some(CircuitType::Function { idx })
-        } else {
-          None
-        }
-      });
-    let memories = self
-      .toplevel
-      .memory_sizes
-      .par_iter()
-      .map(|&width| CircuitType::Memory { width });
-    let gadgets = [CircuitType::Bytes1, CircuitType::Bytes2].into_par_iter();
-    let witness_data = functions
-      .chain(memories)
-      .chain(gadgets)
-      .map(|circuit_type| match circuit_type {
-        CircuitType::Function { idx } => {
-          self.toplevel.witness_data(idx, &query_record, io_buffer, min_height)
-        },
-        CircuitType::Memory { width } => {
-          Memory::witness_data(width, &query_record, min_height)
-        },
-        CircuitType::Bytes1 => Bytes1.witness_data(&query_record),
-        CircuitType::Bytes2 => Bytes2.witness_data(&query_record),
-      })
-      .collect::<Vec<_>>();
+    let witness = self.build_witness(&query_record, io_buffer, &[]);
     drop(query_record);
-    let (traces, lookups) = witness_data.into_iter().unzip();
-    let witness = SystemWitness { traces, lookups };
     drop(_g);
 
     let mut claim = vec![function_channel(), G::from_usize(fun_idx)];
@@ -283,7 +298,8 @@ impl AiurSystem {
     &self,
     claim: &[G],
     proof: &AiurProof,
-  ) -> Result<(), VerificationError<multi_stark::config::PcsError<AiurConfig>>> {
+  ) -> Result<(), VerificationError<multi_stark::config::PcsError<AiurConfig>>>
+  {
     self.system.verify(claim, proof)
   }
 }
