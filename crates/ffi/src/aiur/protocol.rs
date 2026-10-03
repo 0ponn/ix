@@ -57,6 +57,28 @@ extern "C" fn rs_aiur_proof_of_bytes(
   LeanExternal::alloc(&AIUR_PROOF_CLASS, proof)
 }
 
+/// `Aiur.Proof.ofBytesChecked : @& ByteArray → Except String Proof`
+///
+/// Unlike the trusted-byte constructor above, this is safe at cache and
+/// network boundaries: malformed bytes become a Lean error instead of a Rust
+/// panic that aborts the process (this crate builds with `panic = "abort"`).
+/// Backport of upstream #598's `rs_aiur_proof_of_bytes_checked`.
+#[unsafe(no_mangle)]
+extern "C" fn rs_aiur_proof_of_bytes_checked(
+  byte_array: LeanByteArray<LeanBorrowed<'_>>,
+) -> LeanExcept<LeanOwned> {
+  match AiurProof::from_bytes(byte_array.as_bytes()) {
+    Ok(proof) => {
+      let lean_proof: LeanOwned =
+        LeanExternal::alloc(&AIUR_PROOF_CLASS, proof).into();
+      LeanExcept::ok(lean_proof)
+    },
+    Err(err) => {
+      LeanExcept::error_string(&format!("proof deserialization failed: {err:?}"))
+    },
+  }
+}
+
 /// `Aiur.AiurSystem.vkBytes : @& AiurSystem → ByteArray`
 ///
 /// Serializes the verifying key (`System<AiurCircuit>`) — see
