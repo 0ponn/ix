@@ -2087,7 +2087,7 @@ dependencies = [
 [[package]]
 name = "multi-stark"
 version = "0.1.0"
-source = "git+https://github.com/0ponn/multi-stark.git?rev=53131aee94620f9a0bb6e2e920414f6acb5c3107#53131aee94620f9a0bb6e2e920414f6acb5c3107"
+source = "git+https://github.com/0ponn/multi-stark.git?rev=c95ed663afef28c401be5977244ab61f4141e338#c95ed663afef28c401be5977244ab61f4141e338"
 dependencies = [
  "bincode",
  "p3-air",

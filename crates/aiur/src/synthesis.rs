@@ -1,4 +1,5 @@
 use rand::rngs::StdRng;
+use multi_stark::config::StarkGenericConfig as _;
 use multi_stark::{
   lookup::LookupAir,
   p3_air::{Air, AirBuilder, BaseAir},
@@ -7,7 +8,7 @@ use multi_stark::{
   prover::Proof,
   system::{ProverKey, System, SystemWitness},
   types::{
-    CommitmentParameters, FriParameters, GoldilocksBlake3ZkConfig, SharedRng,
+    CommitmentParameters, FriParameters, GoldilocksBlake3ZkConfig,
   },
   verifier::VerificationError,
 };
@@ -26,7 +27,7 @@ use crate::{
 };
 
 /// The concrete STARK configuration Aiur instantiates multi-stark with.
-pub type AiurConfig = GoldilocksBlake3ZkConfig<SharedRng<StdRng>>;
+pub type AiurConfig = GoldilocksBlake3ZkConfig<StdRng>;
 
 /// Builds the zero-knowledge proving configuration. Blinding randomness comes
 /// from an OS-seeded ChaCha generator; a verifier never draws from it.
@@ -37,7 +38,7 @@ pub(crate) fn aiur_config(
   AiurConfig::new(
     commitment_parameters,
     fri_parameters,
-    SharedRng::new(rand::make_rng::<StdRng>()),
+    rand::make_rng::<StdRng>(),
   )
 }
 /// A proof under [`AiurConfig`].
@@ -157,6 +158,7 @@ impl AiurSystem {
 
     // Build the `SystemWitness`
     let _g = tracing::info_span!("aiur/witness").entered();
+    let min_height = self.system.config.min_trace_height();
     let functions =
       (0..self.toplevel.functions.len()).into_par_iter().filter_map(|idx| {
         if self.toplevel.functions[idx].constrained {
@@ -176,10 +178,10 @@ impl AiurSystem {
       .chain(gadgets)
       .map(|circuit_type| match circuit_type {
         CircuitType::Function { idx } => {
-          self.toplevel.witness_data(idx, &query_record, io_buffer)
+          self.toplevel.witness_data(idx, &query_record, io_buffer, min_height)
         },
         CircuitType::Memory { width } => {
-          Memory::witness_data(width, &query_record)
+          Memory::witness_data(width, &query_record, min_height)
         },
         CircuitType::Bytes1 => Bytes1.witness_data(&query_record),
         CircuitType::Bytes2 => Bytes2.witness_data(&query_record),
@@ -234,6 +236,7 @@ impl AiurSystem {
     drop(_g);
 
     let _g = tracing::info_span!("aiur/witness").entered();
+    let min_height = self.system.config.min_trace_height();
     let functions =
       (0..self.toplevel.functions.len()).into_par_iter().filter_map(|idx| {
         if self.toplevel.functions[idx].constrained {
@@ -253,10 +256,10 @@ impl AiurSystem {
       .chain(gadgets)
       .map(|circuit_type| match circuit_type {
         CircuitType::Function { idx } => {
-          self.toplevel.witness_data(idx, &query_record, io_buffer)
+          self.toplevel.witness_data(idx, &query_record, io_buffer, min_height)
         },
         CircuitType::Memory { width } => {
-          Memory::witness_data(width, &query_record)
+          Memory::witness_data(width, &query_record, min_height)
         },
         CircuitType::Bytes1 => Bytes1.witness_data(&query_record),
         CircuitType::Bytes2 => Bytes2.witness_data(&query_record),

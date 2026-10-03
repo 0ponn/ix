@@ -54,11 +54,12 @@ impl Memory {
   pub fn witness_data(
     size: usize,
     record: &QueryRecord,
+    min_height: usize,
   ) -> (RowMajorMatrix<G>, Vec<Vec<Lookup<G>>>) {
     let queries = record.memory_queries.get(&size).expect("Invalid size");
     let width = Self::width(size);
     let height_no_padding = queries.len();
-    let height = height_no_padding.next_power_of_two();
+    let height = height_no_padding.next_power_of_two().max(min_height);
 
     let mut rows = vec![G::ZERO; height * width];
     let rows_no_padding = &mut rows[0..height_no_padding * width];

@@ -78,6 +78,7 @@ impl Toplevel {
     function_index: usize,
     query_record: &QueryRecord,
     io_buffer: &IOBuffer,
+    min_height: usize,
   ) -> (RowMajorMatrix<G>, Vec<Vec<Lookup<G>>>) {
     let func = &self.functions[function_index];
     let width = func.width();
@@ -87,7 +88,9 @@ impl Toplevel {
       .filter(|(_, res)| !res.multiplicity.is_zero())
       .collect::<Vec<_>>();
     let height_no_padding = queries.len();
-    let height = height_no_padding.next_power_of_two();
+    // Padding rows are all-zero with empty lookups; `min_height` is the
+    // zero-knowledge floor below which the openings would determine the trace.
+    let height = height_no_padding.next_power_of_two().max(min_height);
     let mut rows = vec![G::ZERO; height * width];
     let rows_no_padding = &mut rows[0..height_no_padding * width];
     let empty_lookup = Lookup::empty();
