@@ -9,6 +9,7 @@ hashbrown = { workspace = true }
 indexmap = { workspace = true }
 multi-stark = { workspace = true }
 num-bigint = { workspace = true }
+rand = "0.10"
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 tracing = { workspace = true }

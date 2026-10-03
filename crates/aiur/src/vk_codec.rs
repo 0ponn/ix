@@ -46,7 +46,7 @@ use multi_stark::{
 use crate::{
   constraints::Constraints,
   memory::Memory,
-  synthesis::{AiurCircuit, AiurConfig, AiurSystem},
+  synthesis::{AiurCircuit, AiurConfig, AiurSystem, aiur_config},
 };
 
 type Expr = SymbolicExpression<Val>;
@@ -398,7 +398,7 @@ pub(crate) fn from_bytes(
     ));
   }
   let system = System {
-    config: AiurConfig::new(commitment_parameters, fri_parameters),
+    config: aiur_config(commitment_parameters, fri_parameters),
     circuits,
     preprocessed_commit,
     preprocessed_indices,
@@ -413,7 +413,7 @@ mod tests {
   use multi_stark::{lookup::LookupAir, types::CommitmentParameters};
 
   fn test_parameters() -> (CommitmentParameters, FriParameters) {
-    let cp = CommitmentParameters { log_blowup: 1, cap_height: 0 };
+    let cp = CommitmentParameters { log_blowup: 2, cap_height: 0 };
     let fp = FriParameters {
       log_final_poly_len: 0,
       max_log_arity: 1,
@@ -431,7 +431,7 @@ mod tests {
   fn system_vk_round_trips() {
     let (cp, fp) = test_parameters();
     let (system, _key) = System::new(
-      AiurConfig::new(cp, fp),
+      aiur_config(cp, fp),
       [
         LookupAir::new(AiurCircuit::Bytes1, Bytes1.lookups()),
         LookupAir::new(AiurCircuit::Bytes2, Bytes2.lookups()),
@@ -447,7 +447,7 @@ mod tests {
   fn rejects_trailing_bytes() {
     let (cp, fp) = test_parameters();
     let (system, _key) = System::new(
-      AiurConfig::new(cp, fp),
+      aiur_config(cp, fp),
       [LookupAir::new(AiurCircuit::Bytes1, Bytes1.lookups())],
     );
     let mut bytes = to_bytes(&system, cp, fp);

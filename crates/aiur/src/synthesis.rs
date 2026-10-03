@@ -1,3 +1,4 @@
+use rand::rngs::StdRng;
 use multi_stark::{
   lookup::LookupAir,
   p3_air::{Air, AirBuilder, BaseAir},
@@ -6,7 +7,7 @@ use multi_stark::{
   prover::Proof,
   system::{ProverKey, System, SystemWitness},
   types::{
-    CommitmentParameters, FriParameters, GoldilocksBlake3Config, PcsError,
+    CommitmentParameters, FriParameters, GoldilocksBlake3ZkConfig, SharedRng,
   },
   verifier::VerificationError,
 };
@@ -25,7 +26,20 @@ use crate::{
 };
 
 /// The concrete STARK configuration Aiur instantiates multi-stark with.
-pub type AiurConfig = GoldilocksBlake3Config;
+pub type AiurConfig = GoldilocksBlake3ZkConfig<SharedRng<StdRng>>;
+
+/// Builds the zero-knowledge proving configuration. Blinding randomness comes
+/// from an OS-seeded ChaCha generator; a verifier never draws from it.
+pub(crate) fn aiur_config(
+  commitment_parameters: CommitmentParameters,
+  fri_parameters: FriParameters,
+) -> AiurConfig {
+  AiurConfig::new(
+    commitment_parameters,
+    fri_parameters,
+    SharedRng::new(rand::make_rng::<StdRng>()),
+  )
+}
 /// A proof under [`AiurConfig`].
 pub type AiurProof = Proof<AiurConfig>;
 
@@ -114,7 +128,7 @@ impl AiurSystem {
     ]
     .into_iter();
 
-    let config = AiurConfig::new(commitment_parameters, fri_parameters);
+    let config = aiur_config(commitment_parameters, fri_parameters);
     let (system, key) = System::new(
       config,
       function_circuits.chain(memory_circuits).chain(gadget_circuits),
@@ -266,7 +280,7 @@ impl AiurSystem {
     &self,
     claim: &[G],
     proof: &AiurProof,
-  ) -> Result<(), VerificationError<PcsError>> {
+  ) -> Result<(), VerificationError<multi_stark::config::PcsError<AiurConfig>>> {
     self.system.verify(claim, proof)
   }
 }

@@ -54,6 +54,7 @@ dependencies = [
  "indexmap",
  "multi-stark",
  "num-bigint",
+ "rand 0.10.1",
  "rayon",
  "rustc-hash",
  "tracing",
@@ -329,6 +330,17 @@ name = "cfg_aliases"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+
+[[package]]
+name = "chacha20"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d524456ba66e72eb8b115ff89e01e497f8e6d11d78b70b1aa13c0fbd97540a81"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "rand_core 0.10.1",
+]
 
 [[package]]
 name = "chrono"
@@ -2075,7 +2087,7 @@ dependencies = [
 [[package]]
 name = "multi-stark"
 version = "0.1.0"
-source = "git+https://github.com/argumentcomputer/multi-stark.git?rev=2c019220cb43ce946efec6b9caf507f5a6bccd1c#2c019220cb43ce946efec6b9caf507f5a6bccd1c"
+source = "git+https://github.com/0ponn/multi-stark.git?rev=53131aee94620f9a0bb6e2e920414f6acb5c3107#53131aee94620f9a0bb6e2e920414f6acb5c3107"
 dependencies = [
  "bincode",
  "p3-air",
@@ -2092,6 +2104,7 @@ dependencies = [
  "p3-merkle-tree",
  "p3-symmetric",
  "p3-util",
+ "rand 0.10.1",
  "serde",
  "tracing",
 ]
@@ -3147,6 +3160,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
 dependencies = [
+ "chacha20",
  "getrandom 0.4.2",
  "rand_core 0.10.1",
 ]
