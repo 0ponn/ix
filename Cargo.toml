@@ -50,7 +50,7 @@ itertools = "0.14.0"
 log = "0.4"
 memmap2 = "0.9"
 mimalloc = { version = "0.1", default-features = false }
-multi-stark = { git = "https://github.com/0ponn/multi-stark.git", rev = "f0687bd5b0e81647993784355291673fe8a2f50c" }
+multi-stark = { git = "https://github.com/0ponn/multi-stark.git", rev = "3bc3ab9fb32ac90addf39b6523867a1110f88eef" }
 num-bigint = "0.4.6"
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
